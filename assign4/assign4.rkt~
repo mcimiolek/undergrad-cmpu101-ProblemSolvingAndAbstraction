@@ -1,0 +1,237 @@
+;; The first three lines of this file were inserted by DrRacket. They record metadata
+;; about the language level of this file in a form that our tools can easily process.
+#reader(lib "htdp-intermediate-lambda-reader.ss" "lang")((modname assign4) (read-case-sensitive #t) (teachpacks ()) (htdp-settings #(#t constructor repeating-decimal #f #t none #f () #f)))
+; CMPU-101 
+; Fall 2016
+; Assign 4
+; Matthew Imiolek 
+;
+; Description: A game similar to tetris with only one style of falling block
+
+(require 2htdp/image) 
+(require 2htdp/universe)
+
+
+;Definitions
+(define WIDTH 10) ; # of blocks, horizontally
+(define HEIGHT 15)
+(define SIZE 50) ; blocks are squares
+(define SCENE-SIZE-X (* WIDTH SIZE))
+(define SCENE-SIZE-Y (* HEIGHT SIZE))
+(define BACKGROUND (place-image (rectangle SCENE-SIZE-X SCENE-SIZE-Y "solid" "white") SCENE-SIZE-X SCENE-SIZE-Y
+               (empty-scene (+ SCENE-SIZE-X 30) (+ SCENE-SIZE-Y 30))))
+ 
+(define BLOCK ; red squares with black rims
+  (overlay
+    (square (- SIZE 1) "solid" "red")
+    (square SIZE "outline" "black")))
+
+(define-struct tetris [block landscape])
+(define-struct block [x y])
+
+;Data Definitions
+; A Tetris is a structure:
+;   (make-tetris Block Landscape)
+
+; A Landscape is one of: 
+;  '() 
+;  (cons Block Landscape)
+
+; Block is a structure:
+;   (make-block N N)
+ 
+; interpretations
+; (make-block x y) depicts a block whose left 
+; corner is (* x SIZE) pixels from the left and
+; (* y SIZE) pixels from the top;
+; (make-tetris b0 (list b1 b2 ...)) means b0 is the
+; dropping block, while b1, b2, and ... are resting
+
+
+(define landscape0 '())
+(define tetris0 (make-tetris (make-block 0 (- HEIGHT SIZE)) landscape0))
+
+
+;Functions
+
+;The main program for tetris
+(define (stop-and-go _)
+  (big-bang (make-tetris (make-block (* 5 SIZE) 0) '())
+          [to-draw render-game]
+          [on-tick block-motion 1/4]
+          [on-key move-side]))
+
+
+;check-landscape : tetris -> boolean
+;Checks if the landscape has a block the current block would hit
+(define (check-landscape tet)
+  (cond
+    [(empty? (tetris-landscape tet)) false]
+    [(and (= (block-x (tetris-block tet)) (block-x (first (tetris-landscape tet)))) (>= (block-y (tetris-block tet)) (-(block-y (first (tetris-landscape tet))) SIZE))) true]
+    [else (check-landscape (make-tetris (tetris-block tet) (rest (tetris-landscape tet))))]))
+
+(check-expect (check-landscape (make-tetris (make-block 0 2) '())) false)
+(check-expect (check-landscape (make-tetris (make-block 0 2) (list (make-block 1 5)))) false)
+(check-expect (check-landscape (make-tetris (make-block 0 2) (list (make-block 1 2)))) false)
+(check-expect (check-landscape (make-tetris (make-block 0 2) (list (make-block 0 55)))) false)
+(check-expect (check-landscape (make-tetris (make-block 0 2) (list (make-block 0 55) (make-block 7 8)))) false)
+(check-expect (check-landscape (make-tetris (make-block 0 2) (list (make-block 0 5) (make-block 0 2)))) true)
+(check-expect (check-landscape (make-tetris (make-block 0 2) (list (make-block 0 5) (make-block 0 1)))) true)
+(check-expect (check-landscape (make-tetris (make-block 0 2) (list (make-block 0 2)))) true)
+(check-expect (check-landscape (make-tetris (make-block 0 2) (list (make-block 0 1)))) true)
+
+
+;block-dropping : tetris -> boolean
+;Tells wether or not the block is dropping
+(define (block-bottom? tet)
+  (cond
+    [(> (block-y (tetris-block tet)) (* 14 SIZE)) true]
+    [else
+     (cond
+       [(check-landscape tet) true]
+       [else false])]))
+
+(check-expect (block-bottom? (make-tetris (make-block 0 2) '())) false)
+(check-expect (block-bottom? (make-tetris (make-block 0 750) '())) true)
+(check-expect (block-bottom? (make-tetris (make-block 0 2) (list (make-block 0 55) (make-block 7 8)))) false)
+(check-expect (block-bottom? (make-tetris (make-block 0 2) (list (make-block 0 5) (make-block 0 1)))) true)
+(check-expect (block-bottom? (make-tetris (make-block 0 2) (list (make-block 0 5) (make-block 0 2)))) true)
+(check-expect (block-bottom? (make-tetris (make-block 0 2) (list (make-block 0 2)))) true)
+(check-expect (block-bottom? (make-tetris (make-block 0 2) (list (make-block 0 1)))) true)
+(check-expect (block-bottom? (make-tetris (make-block 0 2) (list (make-block 0 53)))) false)
+
+
+;move-down : tetris -> tetris
+;Moves the current block down
+(define (move-down tet)
+  (make-tetris (make-block (block-x (tetris-block tet)) (+ (block-y (tetris-block tet)) SIZE)) (tetris-landscape tet)))
+
+(check-expect (move-down (make-tetris (make-block 0 10) '())) (make-tetris (make-block 0 60) '()))
+(check-expect (move-down (make-tetris (make-block 0 2) (list (make-block 0 5) (make-block 7 8)))) (make-tetris (make-block 0 52) (list (make-block 0 5) (make-block 7 8))))
+
+;new-block : tetris -> tetris
+;Makes a new moving block
+(define (new-block tet)
+  (make-tetris (make-block (* 5 SIZE) SIZE) (cons (tetris-block tet) (tetris-landscape tet))))
+
+(check-expect (new-block (make-tetris (make-block 0 2) (list (make-block 0 5) (make-block 7 8)))) (make-tetris (make-block 250 50) (list (make-block 0 2)(make-block 0 5) (make-block 7 8))))
+
+
+;block-motion : tetris -> tetris
+;Moves the block down or creates a new moving block if needed
+(define (block-motion tet)
+  (cond
+    [(block-bottom? tet) (new-block tet)]
+    [else (move-down tet)]))
+
+(check-expect (block-motion (make-tetris (make-block 0 2) (list (make-block 0 5) (make-block 0 1)))) (make-tetris (make-block 250 50) (list (make-block 0 2)(make-block 0 5) (make-block 0 1))))
+(check-expect (block-motion (make-tetris (make-block 0 2) (list (make-block 0 5) (make-block 0 2)))) (make-tetris (make-block 250 50) (list (make-block 0 2)(make-block 0 5) (make-block 0 2))))
+(check-expect (block-motion (make-tetris (make-block 0 2) (list (make-block 0 2)))) (make-tetris (make-block 250 50) (list (make-block 0 2)(make-block 0 2))))
+(check-expect (block-motion (make-tetris (make-block 0 2) (list (make-block 0 1)))) (make-tetris (make-block 250 50) (list (make-block 0 2)(make-block 0 1))))
+(check-expect (block-motion (make-tetris (make-block 0 750) '())) (make-tetris (make-block 250 50) (list (make-block 0 750))))
+(check-expect (block-motion (make-tetris (make-block 0 200) '())) (make-tetris (make-block 0 250) '()))
+(check-expect (block-motion (make-tetris (make-block 0 100) (list (make-block 0 250) (make-block 7 8)))) (make-tetris (make-block 0 150) (list (make-block 0 250) (make-block 7 8))))
+
+
+; check-left : tetris -> boolean
+; checks if the block can move left anymore
+(define (check-left tet)
+  (cond
+    [(<= (block-x (tetris-block tet)) 0) false]
+    [else (check-landscape-left tet)]))
+
+(check-expect (check-left (make-tetris (make-block 0 2) (list (make-block 0 5) (make-block 0 1)))) false)
+(check-expect (check-left (make-tetris (make-block 250 2) (list (make-block 0 5) (make-block 0 1)))) true)
+(check-expect (check-left (make-tetris (make-block 250 2) (list (make-block 200 1) (make-block 0 1)))) false)
+
+
+; check-right : tetris -> boolean
+; checks if the block can move right anymore
+(define (check-right tet)
+  (cond
+    [(>= (block-x (tetris-block tet)) (* 10 SIZE)) false]
+    [else (check-landscape-right tet)]))
+
+(check-expect (check-right (make-tetris (make-block 500 2) (list (make-block 0 5) (make-block 0 1)))) false)
+(check-expect (check-right (make-tetris (make-block 250 2) (list (make-block 500 5) (make-block 500 1)))) true)
+(check-expect (check-right (make-tetris (make-block 250 2) (list (make-block 300 1) (make-block 0 1)))) false)
+
+
+;check-landscape-left : tetris -> boolean
+;Checks if the landscape has a block the current block would hit if moved left
+(define (check-landscape-left tet)
+  (cond
+    [(empty? (tetris-landscape tet)) true]
+    [(and (<= (block-x (tetris-block tet)) (+ (block-x (first (tetris-landscape tet))) SIZE)) (>= (block-y (tetris-block tet)) (block-y (first (tetris-landscape tet))))) false]
+    [else (check-landscape-left (make-tetris (tetris-block tet) (rest (tetris-landscape tet))))]))
+
+(check-expect (check-landscape-left (make-tetris (make-block 0 2) (list (make-block 0 1) (make-block 200 1)))) false)
+(check-expect (check-landscape-left (make-tetris (make-block 250 2) (list (make-block 0 5) (make-block 0 1)))) true)
+(check-expect (check-landscape-left (make-tetris (make-block 0 2) (list (make-block 200 5) (make-block 0 1)))) false)
+
+
+;check-landscape-right : tetris -> boolean
+;Checks if the landscape has a block the current block would hit if moved right
+(define (check-landscape-right tet)
+  (cond
+    [(empty? (tetris-landscape tet)) true]
+    [(and (>= (block-x (tetris-block tet)) (- (block-x (first (tetris-landscape tet))) SIZE)) (>= (block-y (tetris-block tet)) (block-y (first (tetris-landscape tet))))) false]
+    [else (check-landscape-right (make-tetris (tetris-block tet) (rest (tetris-landscape tet))))]))
+
+(check-expect (check-landscape-left (make-tetris (make-block 500 2) (list (make-block 0 5) (make-block 500 1)))) false)
+(check-expect (check-landscape-left (make-tetris (make-block 250 2) (list (make-block 0 5) (make-block 0 1)))) true)
+(check-expect (check-landscape-left (make-tetris (make-block 500 2) (list (make-block 500 1) (make-block 0 1)))) false)
+
+
+; move-left : tetris -> tetris
+; moves the block left
+(define (move-left tet)
+  (make-tetris (make-block (- (block-x (tetris-block tet)) SIZE) (block-y (tetris-block tet))) (tetris-landscape tet)))
+
+(check-expect (move-left (make-tetris (make-block 55 8) '())) (make-tetris (make-block 5 8) '()))
+
+
+; move-right : tetris -> tetris
+; moves the block right
+(define (move-right tet)
+  (make-tetris (make-block (+ (block-x (tetris-block tet)) SIZE) (block-y (tetris-block tet))) (tetris-landscape tet)))
+
+(check-expect (move-right (make-tetris (make-block 5 8) '())) (make-tetris (make-block 55 8) '()))
+
+
+; move-side : tetris keyEvent -> tetris
+; moves the block left or right if appropriate
+(define (move-side tet k)
+  (cond
+    [(and (check-left tet) (key=? k "a")) (move-left tet)]
+    [(and (check-right tet) (key=? k "d")) (move-right tet)]
+    [else (make-tetris (tetris-block tet) (tetris-landscape tet))]))
+
+(check-expect (move-side (make-tetris (make-block 55 8) '()) "a") (make-tetris (make-block 5 8) '()))
+(check-expect (move-side (make-tetris (make-block 55 8) '()) "d") (make-tetris (make-block 105 8) '()))
+(check-expect (move-side (make-tetris (make-block 55 8) (list (make-block 55 8))) "a") (make-tetris (make-block 55 8)  (list (make-block 55 8))))
+(check-expect (move-side (make-tetris (make-block 55 8) (list (make-block 55 8))) "d") (make-tetris (make-block 55 8)  (list (make-block 55 8))))
+
+; render-game : tetris -> image
+; produces image of the game in its current state on the background
+(define (render-game tet)
+   (render-block (tetris-block tet)
+                        (render-base (tetris-landscape tet) BACKGROUND)))
+
+
+         ;(render-block (first (tetris-landscape tet))
+          ;    (render-game (make-tetris (tetris-block tet)(rest (tetris-landscape tet)))))]))
+
+; render-block : block -> image 
+; produces image of the block on the background
+(define (render-block b s)
+  (render-base (list b) s))
+
+
+; render-base : block -> image
+; produces the base where the blocks have fallen prreviously
+(define (render-base bs s)
+  (cond
+    [(empty? bs) s]
+    [else (place-image BLOCK (block-x (first bs)) (block-y (first bs)) 
+                (render-base (rest bs) s))]))

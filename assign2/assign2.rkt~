@@ -1,0 +1,206 @@
+;; The first three lines of this file were inserted by DrRacket. They record metadata
+;; about the language level of this file in a form that our tools can easily process.
+#reader(lib "htdp-beginner-abbr-reader.ss" "lang")((modname assign2) (read-case-sensitive #t) (teachpacks ((lib "image.rkt" "teachpack" "2htdp"))) (htdp-settings #(#t constructor repeating-decimal #f #t none #f ((lib "image.rkt" "teachpack" "2htdp")) #t)))
+; CMPU-101 
+; Fall 2016
+; Assign 2
+; Matthew Imiolek 
+;
+; Description: Uses a list of bouncing balls to animate many balls
+; of different sizes and colors, all moving in the same scene at 
+; different speeds.
+
+(require 2htdp/image) 
+(require 2htdp/universe)
+
+(define RADIUS 25)
+
+; Scene dimensions
+(define WIDTH 500)
+(define HEIGHT 300)
+
+; Create the background scene image
+(define BACKGROUND
+  (place-image (rectangle WIDTH HEIGHT "solid" "lightgray")
+               (/ WIDTH 2) (/ HEIGHT 2)
+               (empty-scene WIDTH HEIGHT)))
+
+; Data Definitions 
+(define-struct ball (im x y dx dy))
+; A ball is a (make-ball im p dx dy) where
+; im is an image (of the ball), 
+; x and y are numbers representing the ball's position, and
+; dx and dy are numbers representing the ball's horizontal and 
+;   vertical velocity
+
+; Data Definition for a list-of-balls:
+; A list-of-balls is either:
+; 1. '(), or
+; 2. (cons b lob), where b is a ball
+;    and lob is a list-of-balls
+
+; BALL CONSTANTS
+(define BALL-AT-LEFT 
+  (make-ball (circle (+ RADIUS 4) "solid" "teal")
+             (+ RADIUS 10) (/ HEIGHT 2) -4 4))
+
+(define BALL-AT-RIGHT 
+  (make-ball (circle RADIUS "solid" "red")
+             (- WIDTH (+ RADIUS 10)) (/ HEIGHT 2) 4 -4))
+
+(define BALL-AT-TOP 
+  (make-ball (circle (- RADIUS 4) "solid" "yellow")
+             (/ WIDTH 2) (+ RADIUS 10) -4 4))
+
+(define BALL-AT-BOTTOM
+  (make-ball (circle (+ RADIUS 8) "solid" "blue")
+             (/ WIDTH 2) (- HEIGHT 25) -4 4))
+
+
+; Define INIT-LOB to be a list-of-balls:
+; contains the four ball constants created above 
+(define INIT-LOB (list BALL-AT-LEFT BALL-AT-RIGHT BALL-AT-TOP BALL-AT-BOTTOM))
+
+
+; TEMPLATES for a ball and a list-of-balls.
+
+; fun-for-ball : ball -> ???
+; Template for a function that consumes a ball
+(define (fun-for-ball b) 
+  (...(ball-im b)...
+      ...(ball-x b)...(ball-y b)...
+      ...(ball-dx b)...(ball-dy b)...))
+
+; fun-for-lob list-of-balls -> ???
+; Template for a function that consumes a list-of-balls
+(define (fun-for-list-of-balls lob) 
+  (cond
+    [(empty? lob)...] 
+    [else (...(fun-for-ball (first lob))...
+              ...(fun-for-lob (rest lob))...)]))
+
+
+;FUNCTIONS
+
+; top-edge? : ball -> boolean
+; determines whether the ball reached the top edge of scene
+(define (top-edge? b)
+  (cond
+    [(< (ball-y b) RADIUS) true]
+    [else false]))
+
+(check-expect (top-edge? (make-ball (circle (+ RADIUS 4) "solid" "teal") 50 50 4 5)) false)
+(check-expect (top-edge? (make-ball (circle (+ RADIUS 4) "solid" "teal") 50 15 4 5)) true)
+
+; bottom-edge? : ball -> boolean
+; determines whether the ball reached the bottom edge of scene
+(define (bottom-edge? b)
+  (cond
+    [(> (ball-y b) (- HEIGHT RADIUS)) true]
+    [else false]))
+
+(check-expect (bottom-edge? (make-ball (circle (+ RADIUS 4) "solid" "teal") 50 50 4 5)) false)
+(check-expect (bottom-edge? (make-ball (circle (+ RADIUS 4) "solid" "teal") 50 1000 4 5)) true)
+
+; left-edge? : ball -> boolean
+; determines whether the ball reached the left edge of scene
+(define (left-edge? b)
+  (cond
+    [(< (ball-x b) RADIUS) true]
+    [else false]))
+
+(check-expect (left-edge? (make-ball (circle (+ RADIUS 4) "solid" "teal") 50 50 4 5)) false)
+(check-expect (left-edge? (make-ball (circle (+ RADIUS 4) "solid" "teal") 15 50 4 5)) true)
+
+; right-edge? : ball -> boolean
+; determines whether the ball reached the right edge of scene
+(define (right-edge? b)
+  (cond
+    [(> (ball-x b) (- WIDTH RADIUS)) true]
+    [else false]))
+
+(check-expect (right-edge? (make-ball (circle (+ RADIUS 4) "solid" "teal") 50 50 4 5)) false)
+(check-expect (right-edge? (make-ball (circle (+ RADIUS 4) "solid" "teal") 1000 50 4 5)) true)
+
+; reverse-up-down : ball -> ball
+; reverse ball's up-down direction   
+(define (reverse-up-down b)
+  (make-ball (ball-im b) (ball-x b) (ball-y b) (ball-dx b) (* (ball-dy b) -1)))
+
+(check-expect (reverse-up-down (make-ball (circle (+ RADIUS 4) "solid" "teal") 50 50 4 5))
+              (make-ball (circle (+ RADIUS 4) "solid" "teal") 50 50 4 -5))
+
+; reverse-left-right : ball -> ball
+; reverse ball's left-right direction   
+(define (reverse-left-right b)
+  (make-ball (ball-im b) (ball-x b) (ball-y b) (* (ball-dx b) -1) (ball-dy b)))
+
+(check-expect (reverse-left-right (make-ball (circle (+ RADIUS 4) "solid" "teal") 50 50 4 5))
+              (make-ball (circle (+ RADIUS 4) "solid" "teal") 50 50 -4 5))
+
+; bounce-up-down : ball -> ball
+; changes direction of given ball if it hit the top or bottom edge
+(define (bounce-up-down b)
+  (cond
+    [(bottom-edge? b) (reverse-up-down b)]
+    [(top-edge? b) (reverse-up-down b)]
+    [else b]))
+
+(check-expect (bounce-up-down (make-ball (circle (+ RADIUS 4) "solid" "teal") 50 15 4 5))
+              (make-ball (circle (+ RADIUS 4) "solid" "teal") 50 15 4 -5))
+(check-expect (bounce-up-down (make-ball (circle (+ RADIUS 4) "solid" "teal") 50 1000 4 5))
+              (make-ball (circle (+ RADIUS 4) "solid" "teal") 50 1000 4 -5))
+(check-expect (bounce-up-down (make-ball (circle (+ RADIUS 4) "solid" "teal") 50 50 4 5))
+              (make-ball (circle (+ RADIUS 4) "solid" "teal") 50 50 4 5))
+
+; bounce-left-right : ball -> ball
+; changes direction of given ball if it hit the left or right edge
+(define (bounce-left-right b)
+  (cond
+    [(left-edge? b) (reverse-left-right b)]
+    [(right-edge? b) (reverse-left-right b)]
+    [else b]))
+
+(check-expect (bounce-left-right (make-ball (circle (+ RADIUS 4) "solid" "teal") 15 50 4 5))
+              (make-ball (circle (+ RADIUS 4) "solid" "teal") 15 50 -4 5))
+(check-expect (bounce-left-right (make-ball (circle (+ RADIUS 4) "solid" "teal") 1000 50 4 5))
+              (make-ball (circle (+ RADIUS 4) "solid" "teal")  1000 50 -4 5))
+(check-expect (bounce-left-right (make-ball (circle (+ RADIUS 4) "solid" "teal") 50 50 4 5))
+              (make-ball (circle (+ RADIUS 4) "solid" "teal") 50 50 4 5))
+
+; move-ball : ball -> ball
+; moves the given ball by its dx and dy amounts
+(define (move-ball b)
+  (make-ball (ball-im b) (+ (ball-x b) (ball-dx b)) (+ (ball-y b) (ball-dy b)) (ball-dx b) (ball-dy b)))
+
+(check-expect (move-ball (make-ball (circle (+ RADIUS 4) "solid" "teal") 50 50 4 5))
+              (make-ball (circle (+ RADIUS 4) "solid" "teal") 54 55 4 5))
+
+; move-list-of-balls : list-of-balls -> list-of-balls
+; moves (and possibly bounces) each ball in given list
+(define (move-list-of-balls lob)
+  (cond
+    [(empty? lob) '()] 
+    [(cons? lob) (cons (move-ball (bounce-left-right (bounce-up-down (first lob)))) (move-list-of-balls (rest lob)))]))
+
+; render-ball : ball image -> image
+; renders given ball b on given background bg
+(define (render-ball b bg)
+  (place-image (ball-im b) (ball-x b) (ball-y b) bg))
+
+; render-balls : list-of-balls -> image 
+; produces image of each ball at each given current position on
+; background.
+; (Yes, I provided this function for you! You shouldn't have to
+;  touch it if you've correctly implemented the functions above.)
+(define (render-balls lob) 
+  (cond [(empty? lob) BACKGROUND]
+        [else (render-ball (first lob)
+                           (render-balls (rest lob)))]))
+
+; Here's the big-bang expression!
+; It uses INIT-LOB as the initial state of the world.
+; Once you've implemented move-list-of-balls, uncomment on-tick below.
+(big-bang INIT-LOB
+          (on-tick move-list-of-balls 1/28) 
+          (to-draw render-balls))
